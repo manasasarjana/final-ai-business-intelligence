@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, AlertCircle, Database, ChevronRight, RefreshCw } from 'lucide-react';
+import { Send, Bot, User, AlertCircle, Database, ChevronRight, RefreshCw, Pin, Download, Image as ImageIcon, Mic, MicOff } from 'lucide-react';
 import DynamicChart from './DynamicChart';
+import { PinnedItem } from './DashboardGrid';
+import html2canvas from 'html2canvas';
 
 interface Message {
     id: string;
@@ -14,7 +16,12 @@ interface Message {
     isError?: boolean;
 }
 
-export default function ChatInterface() {
+interface ChatInterfaceProps {
+    onPin?: (item: PinnedItem) => void;
+    pinnedIds?: string[];
+}
+
+export default function ChatInterface({ onPin, pinnedIds = [] }: ChatInterfaceProps) {
     const [messages, setMessages] = useState<Message[]>([
         {
             id: 'welcome',
@@ -24,7 +31,12 @@ export default function ChatInterface() {
     ]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isForecasting, setIsForecasting] = useState(false);
+    const [isListening, setIsListening] = useState(false);
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const initialFetchDone = useRef(false);
+    const recognitionRef = useRef<any>(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -33,6 +45,113 @@ export default function ChatInterface() {
     useEffect(() => {
         scrollToBottom();
     }, [messages, isLoading]);
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+            if (SpeechRecognition) {
+                const recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+
+                recognition.onresult = (event: any) => {
+                    const transcript = event.results[0][0].transcript;
+                    setInput(prev => prev + (prev ? ' ' : '') + transcript);
+                    setIsListening(false);
+                };
+
+                recognition.onerror = (event: any) => {
+                    console.error("Speech recognition error", event.error);
+                    setIsListening(false);
+                    // Add an error message to chat if microphone fails
+                    if (event.error === 'not-allowed') {
+                        setMessages(prev => [...prev, {
+                            id: Date.now().toString() + 'e-mic',
+                            role: 'assistant',
+                            content: 'Microphone access was denied. Please allow microphone permissions in your browser settings.',
+                            isError: true
+                        }]);
+                    } else if (event.error === 'network') {
+                        setMessages(prev => [...prev, {
+                            id: Date.now().toString() + 'e-mic',
+                            role: 'assistant',
+                            content: 'Network error occurred during speech recognition. Ensure you are online.',
+                            isError: true
+                        }]);
+                    } else {
+                        setMessages(prev => [...prev, {
+                            id: Date.now().toString() + 'e-mic',
+                            role: 'assistant',
+                            content: `Speech recognition failed with error: ${event.error}`,
+                            isError: true
+                        }]);
+                    }
+                };
+
+                recognition.onend = () => {
+                    setIsListening(false);
+                };
+
+                recognitionRef.current = recognition;
+            }
+        }
+    }, []);
+
+    const toggleListening = () => {
+        if (isListening) {
+            recognitionRef.current?.stop();
+            setIsListening(false);
+        } else {
+            try {
+                if (!recognitionRef.current) {
+                    setMessages(prev => [...prev, {
+                        id: Date.now().toString() + 'e-mic',
+                        role: 'assistant',
+                        content: 'Voice input is not supported in this browser. Try using Google Chrome or Edge.',
+                        isError: true
+                    }]);
+                    return;
+                }
+                recognitionRef.current.start();
+                setIsListening(true);
+            } catch (e) {
+                console.error("Failed to start listening", e);
+                setIsListening(false);
+            }
+        }
+    };
+
+    useEffect(() => {
+        if (initialFetchDone.current) return;
+        initialFetchDone.current = true;
+
+        const fetchInsights = async () => {
+            setIsLoading(true);
+            try {
+                const response = await fetch('/api/auto-insights', { method: 'POST' });
+                const data = await response.json();
+
+                if (response.ok && data.insights && data.insights.length > 0) {
+                    const insightMsgs: Message[] = data.insights.map((insight: any, index: number) => ({
+                        id: `auto-${Date.now()}-${index}`,
+                        role: 'assistant',
+                        content: insight.content,
+                        chartConfig: insight.chartConfig,
+                        chartData: insight.chartData,
+                        sqlQuery: insight.sqlQuery
+                    }));
+
+                    setMessages(prev => [...prev, ...insightMsgs]);
+                }
+            } catch (err) {
+                console.error("Failed to load auto-insights", err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchInsights();
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -50,7 +169,7 @@ export default function ChatInterface() {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: userQuery })
+                body: JSON.stringify({ query: userQuery, forecast: isForecasting })
             });
 
             const data = await response.json();
@@ -148,8 +267,75 @@ export default function ChatInterface() {
                                     </div>
 
                                     {/* Dynamic Chart Container */}
-                                    <div className="glass-card" style={{ padding: '24px', height: '400px', width: '100%' }}>
-                                        <DynamicChart data={msg.chartData} config={msg.chartConfig} />
+                                    <div className="glass-card" style={{ padding: '24px', height: '400px', width: '100%', position: 'relative' }}>
+                                        {onPin && (
+                                            <button
+                                                onClick={() => onPin({
+                                                    id: msg.id,
+                                                    title: msg.chartConfig.title,
+                                                    chartConfig: msg.chartConfig,
+                                                    chartData: msg.chartData!
+                                                })}
+                                                disabled={pinnedIds.includes(msg.id)}
+                                                style={{
+                                                    position: 'absolute', top: '16px', right: '16px', zIndex: 10,
+                                                    background: pinnedIds.includes(msg.id) ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.1)',
+                                                    color: pinnedIds.includes(msg.id) ? '#10B981' : 'white',
+                                                    border: '1px solid var(--glass-border)',
+                                                    padding: '6px 12px', borderRadius: '4px', cursor: pinnedIds.includes(msg.id) ? 'default' : 'pointer',
+                                                    display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                <Pin size={14} />
+                                                {pinnedIds.includes(msg.id) ? 'Pinned' : 'Pin to Dashboard'}
+                                            </button>
+                                        )}
+                                        {/* Export Buttons */}
+                                        <div style={{ position: 'absolute', bottom: '16px', right: '16px', zIndex: 10, display: 'flex', gap: '8px' }}>
+                                            <button
+                                                onClick={() => {
+                                                    const keys = Object.keys(msg.chartData![0]);
+                                                    const csv = [
+                                                        keys.join(','),
+                                                        ...msg.chartData!.map((r: any) => keys.map(k => `"${r[k]}"`).join(','))
+                                                    ].join('\n');
+                                                    const blob = new Blob([csv], { type: 'text/csv' });
+                                                    const a = document.createElement('a');
+                                                    a.href = URL.createObjectURL(blob);
+                                                    a.download = `${msg.chartConfig.title.replace(/\s+/g, '_')}.csv`;
+                                                    a.click();
+                                                }}
+                                                style={{
+                                                    background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)', border: '1px solid var(--glass-border)',
+                                                    padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', transition: 'all 0.2s'
+                                                }}
+                                                title="Download Data as CSV"
+                                            >
+                                                <Download size={12} /> CSV
+                                            </button>
+                                            <button
+                                                onClick={async () => {
+                                                    const el = document.getElementById(`chart-wrapper-${msg.id}`);
+                                                    if (el) {
+                                                        const canvas = await html2canvas(el, { backgroundColor: '#151A23' });
+                                                        const a = document.createElement('a');
+                                                        a.download = `${msg.chartConfig.title.replace(/\s+/g, '_')}.png`;
+                                                        a.href = canvas.toDataURL();
+                                                        a.click();
+                                                    }
+                                                }}
+                                                style={{
+                                                    background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)', border: '1px solid var(--glass-border)',
+                                                    padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', transition: 'all 0.2s'
+                                                }}
+                                                title="Download Chart as PNG"
+                                            >
+                                                <ImageIcon size={12} /> PNG
+                                            </button>
+                                        </div>
+                                        <div id={`chart-wrapper-${msg.id}`} style={{ width: '100%', height: '100%' }}>
+                                            <DynamicChart data={msg.chartData} config={msg.chartConfig} />
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -174,29 +360,60 @@ export default function ChatInterface() {
 
             {/* Input Area */}
             <div style={{ padding: '20px 24px', borderTop: '1px solid var(--glass-border)', background: 'rgba(0,0,0,0.2)' }}>
-                <form onSubmit={handleSubmit} style={{ position: 'relative', display: 'flex', gap: '12px' }}>
-                    <input
-                        type="text"
-                        className="input-field"
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        placeholder="Ask a question about your data... (e.g. 'Show me monthly revenue for Q3')"
-                        disabled={isLoading}
-                        style={{ paddingRight: '50px' }}
-                    />
+                <form onSubmit={handleSubmit} style={{ position: 'relative', display: 'flex', gap: '12px', alignItems: 'center' }}>
                     <button
-                        type="submit"
-                        disabled={isLoading || !input.trim()}
+                        type="button"
+                        onClick={() => setIsForecasting(!isForecasting)}
                         style={{
-                            position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)',
-                            background: input.trim() && !isLoading ? 'var(--accent-color)' : 'rgba(255,255,255,0.1)',
-                            color: 'white', border: 'none', width: '36px', height: '36px', borderRadius: 'var(--radius-sm)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() && !isLoading ? 'pointer' : 'not-allowed',
-                            transition: 'all 0.2s ease'
+                            background: isForecasting ? 'var(--accent-color)' : 'rgba(255,255,255,0.05)',
+                            color: isForecasting ? 'white' : 'var(--text-secondary)',
+                            border: '1px solid', borderColor: isForecasting ? 'var(--accent-color)' : 'var(--glass-border)',
+                            padding: '8px 12px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', whiteSpace: 'nowrap', transition: 'all 0.2s'
                         }}
+                        title="Enable AI Forecasting (Extrapolates 3-6 periods)"
                     >
-                        <Send size={18} style={{ marginLeft: '-2px' }} />
+                        <Bot size={14} /> Forecast: {isForecasting ? 'ON' : 'OFF'}
                     </button>
+
+                    <div style={{ position: 'relative', flex: 1 }}>
+                        <input
+                            type="text"
+                            className="input-field"
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            placeholder="Ask a question about your data... (e.g. 'Show me monthly revenue for Q3')"
+                            disabled={isLoading}
+                            style={{ paddingRight: '90px', width: '100%' }}
+                        />
+                        <button
+                            type="button"
+                            onClick={toggleListening}
+                            title={recognitionRef.current ? "Click to speak" : "Voice input not supported"}
+                            disabled={!recognitionRef.current || isLoading}
+                            style={{
+                                position: 'absolute', right: '48px', top: '50%', transform: 'translateY(-50%)',
+                                background: 'transparent', color: isListening ? '#EF4444' : 'var(--text-secondary)',
+                                border: 'none', cursor: (!recognitionRef.current || isLoading) ? 'not-allowed' : 'pointer',
+                                padding: '8px', zIndex: 5, transition: 'all 0.2s', display: 'flex', alignItems: 'center'
+                            }}
+                        >
+                            {isListening ? <MicOff size={18} className="animate-pulse" /> : <Mic size={18} />}
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isLoading || !input.trim()}
+                            style={{
+                                position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)',
+                                background: input.trim() && !isLoading ? 'var(--accent-color)' : 'rgba(255,255,255,0.1)',
+                                color: 'white', border: 'none', width: '36px', height: '36px', borderRadius: 'var(--radius-sm)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() && !isLoading ? 'pointer' : 'not-allowed',
+                                transition: 'all 0.2s ease'
+                            }}
+                        >
+                            <Send size={18} style={{ marginLeft: '-2px' }} />
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>

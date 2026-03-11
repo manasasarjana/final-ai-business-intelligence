@@ -37,14 +37,19 @@ export async function POST(request: NextRequest) {
         // Clean column names for SQLite (remove spaces/special characters)
         const cleanColumns = columns.map(col => col.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase());
 
+        // Derive table name from file name
+        let tableName = file.name.replace(/\.csv$/i, '').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+        if (/^[0-9]/.test(tableName)) tableName = 't_' + tableName;
+        if (!tableName) tableName = 'dataset_' + Date.now();
+
         // Connect to SQLite
         const db = new Database(DB_PATH);
 
-        // Dynamic Drop & Create Table named "dataset"
-        db.exec(`DROP TABLE IF EXISTS dataset;`);
+        // Dynamic Drop & Create Table
+        db.exec(`DROP TABLE IF EXISTS "${tableName}";`);
 
         const createTableQuery = `
-      CREATE TABLE dataset (
+      CREATE TABLE "${tableName}" (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ${cleanColumns.map(col => `"${col}" TEXT`).join(', ')}
       );
@@ -53,7 +58,7 @@ export async function POST(request: NextRequest) {
 
         // Insert Data
         const insertQuery = `
-      INSERT INTO dataset (${cleanColumns.map(col => `"${col}"`).join(', ')})
+      INSERT INTO "${tableName}" (${cleanColumns.map(col => `"${col}"`).join(', ')})
       VALUES (${cleanColumns.map(() => '?').join(', ')});
     `;
 
@@ -73,7 +78,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             success: true,
             rowCount: records.length,
-            columns: cleanColumns
+            columns: cleanColumns,
+            tableName: tableName
         });
 
     } catch (error: any) {

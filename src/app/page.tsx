@@ -4,10 +4,47 @@ import React, { useState } from 'react';
 import { Sparkles, Database, LayoutDashboard } from 'lucide-react';
 import FileUpload from '@/components/FileUpload';
 import ChatInterface from '@/components/ChatInterface';
+import DashboardGrid, { PinnedItem } from '@/components/DashboardGrid';
 
 export default function Home() {
   const [isDataReady, setIsDataReady] = useState(false);
   const [dataSummary, setDataSummary] = useState<{ rowCount: number, columns: string[] } | null>(null);
+
+  const [activeTab, setActiveTab] = useState<'chat' | 'dashboard'>('chat');
+  const [pinnedItems, setPinnedItems] = useState<PinnedItem[]>([]);
+  const [isUploadingMore, setIsUploadingMore] = useState(false);
+
+  const handlePin = (item: PinnedItem) => {
+    // Prevent duplicates
+    if (!pinnedItems.some(p => p.id === item.id)) {
+      setPinnedItems(prev => [...prev, item]);
+    }
+  };
+
+  const handleAdditionalUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingMore(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      if (res.ok) {
+        const data = await res.json();
+        setDataSummary(prev => prev ? {
+          rowCount: prev.rowCount + data.rowCount,
+          columns: Array.from(new Set([...prev.columns, ...data.columns]))
+        } : data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsUploadingMore(false);
+      e.target.value = '';
+    }
+  };
 
   return (
     <div className="home-wrapper" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -26,6 +63,19 @@ export default function Home() {
           <div className="animate-fade-in" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '6px 16px', borderRadius: '100px', fontSize: '0.85rem', color: '#10B981' }}>
             <Database size={14} />
             <span>Dataset Active: {dataSummary.rowCount.toLocaleString()} rows</span>
+
+            <label style={{
+              cursor: isUploadingMore ? 'wait' : 'pointer',
+              marginLeft: '12px',
+              paddingLeft: '12px',
+              borderLeft: '1px solid rgba(16, 185, 129, 0.3)',
+              color: 'var(--accent-color)',
+              fontWeight: 500,
+              opacity: isUploadingMore ? 0.5 : 1
+            }}>
+              {isUploadingMore ? 'Uploading...' : '+ Add CSV'}
+              <input type="file" accept=".csv" style={{ display: 'none' }} onChange={handleAdditionalUpload} disabled={isUploadingMore} />
+            </label>
           </div>
         )}
       </nav>
@@ -57,8 +107,48 @@ export default function Home() {
         ) : (
           /* Chat & Dashboard Interface State */
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <h1 style={{ fontSize: '2rem', marginBottom: '24px', fontFamily: 'var(--font-display)' }}>Dashboard</h1>
-            <ChatInterface />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <button
+                  onClick={() => setActiveTab('chat')}
+                  style={{
+                    background: activeTab === 'chat' ? 'var(--accent-color)' : 'transparent',
+                    color: activeTab === 'chat' ? 'white' : 'var(--text-secondary)',
+                    border: '1px solid',
+                    borderColor: activeTab === 'chat' ? 'var(--accent-color)' : 'var(--glass-border)',
+                    padding: '8px 16px',
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  Chat Analysis
+                </button>
+                <button
+                  onClick={() => setActiveTab('dashboard')}
+                  style={{
+                    background: activeTab === 'dashboard' ? 'var(--accent-color)' : 'transparent',
+                    color: activeTab === 'dashboard' ? 'white' : 'var(--text-secondary)',
+                    border: '1px solid',
+                    borderColor: activeTab === 'dashboard' ? 'var(--accent-color)' : 'var(--glass-border)',
+                    padding: '8px 16px',
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  Pinned Dashboard ({pinnedItems.length})
+                </button>
+              </div>
+            </div>
+
+            {activeTab === 'chat' ? (
+              <ChatInterface onPin={handlePin} pinnedIds={pinnedItems.map(p => p.id)} />
+            ) : (
+              <DashboardGrid items={pinnedItems} />
+            )}
           </div>
         )}
 
