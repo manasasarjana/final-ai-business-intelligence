@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'CSV file is empty' }, { status: 400 });
         }
 
-        const columns = Object.keys(records[0] as object);
+        const columns = Object.keys(records[0] as Record<string, any>);
 
         // Clean column names for SQLite (remove spaces/special characters)
         const cleanColumns = columns.map(col => col.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase());
