@@ -81,13 +81,13 @@ export default function DynamicChart({ data, config }: DynamicChartProps) {
                             fill={mainColor}
                             dataKey={yAxisKey}
                             nameKey={xAxisKey}
-                            label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
-                                const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                                const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
-                                const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
-                                return percent > 0.05 ? (
+                            label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                                const radius = (innerRadius || 0) + ((outerRadius || 0) - (innerRadius || 0)) * 0.5;
+                                const x = cx + radius * Math.cos(-(midAngle || 0) * Math.PI / 180);
+                                const y = cy + radius * Math.sin(-(midAngle || 0) * Math.PI / 180);
+                                return (percent || 0) > 0.05 ? (
                                     <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={500}>
-                                        {`${(percent * 100).toFixed(0)}%`}
+                                        {`${((percent || 0) * 100).toFixed(0)}%`}
                                     </text>
                                 ) : null;
                             }}
