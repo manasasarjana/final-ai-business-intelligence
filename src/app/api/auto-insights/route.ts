@@ -5,7 +5,8 @@ import path from 'path';
 
 export const runtime = 'nodejs';
 
-const DB_PATH = path.join(process.cwd(), 'data.db');
+// Use /tmp in production (Vercel) because the root is read-only
+const DB_PATH = process.env.VERCEL ? '/tmp/data.db' : path.join(process.cwd(), 'data.db');
 
 export async function POST(req: NextRequest) {
     try {
