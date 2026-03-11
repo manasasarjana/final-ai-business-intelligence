@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
             db = new Database(':memory:');
             const records = parse(csvContent, { columns: true, skip_empty_lines: true });
             if (records.length > 0) {
-                const columns = Object.keys(records[0]);
+                const columns = Object.keys(records[0] as any);
                 const cleanColumns = columns.map(col => col.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase());
                 db.exec(`CREATE TABLE data (${cleanColumns.map(col => `"${col}" TEXT`).join(', ')});`);
                 const insertStmt = db.prepare(`INSERT INTO data (${cleanColumns.map(col => `"${col}"`).join(', ')}) VALUES (${cleanColumns.map(() => '?').join(', ')});`);

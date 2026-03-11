@@ -123,7 +123,7 @@ export default function ChatInterface({ onPin, pinnedIds = [], csvContent = '' }
     };
 
     useEffect(() => {
-        if (initialFetchDone.current) return;
+        if (initialFetchDone.current || !csvContent) return;
         initialFetchDone.current = true;
 
         const fetchInsights = async () => {
@@ -156,7 +156,7 @@ export default function ChatInterface({ onPin, pinnedIds = [], csvContent = '' }
         };
 
         fetchInsights();
-    }, []);
+    }, [csvContent]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

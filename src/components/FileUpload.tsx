@@ -62,14 +62,15 @@ export default function FileUpload({ onUploadSuccess }: FileUploadProps) {
             const result = await response.json();
 
             if (!response.ok) {
-                throw new Error(result.error || 'Failed to upload file');
+                console.warn('Server-side table creation failed, but proceeding with client-side data:', result.error);
+                // We don't throw here because we can still use the CSV content on the client
             }
 
             const text = await file.text();
             setUploadStatus('success');
             onUploadSuccess({
-                rowCount: result.rowCount,
-                columns: result.columns
+                rowCount: result.rowCount || 0,
+                columns: result.columns || []
             }, text);
 
             // Reset after 3 seconds
