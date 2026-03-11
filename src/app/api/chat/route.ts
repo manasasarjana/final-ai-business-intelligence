@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
     `;
 
         const response = await hf.chatCompletion({
-            model: "meta-llama/Meta-Llama-3-8B-Instruct",
+            model: "meta-llama/Llama-3.2-3B-Instruct",
             messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: `User Query: ${query}` }
@@ -88,11 +88,19 @@ export async function POST(req: NextRequest) {
 
         let responseText = response.choices[0].message.content || "";
         
-        // Clean up markdown wrapping if present
-        if (responseText.includes("```json")) {
-            responseText = responseText.split("```json")[1].split("```")[0].trim();
-        } else if (responseText.includes("```")) {
-            responseText = responseText.split("```")[1].split("```")[0].trim();
+        // Aggressive cleaning for LLaMA output
+        responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        // Remove any text before the first {
+        const firstBrace = responseText.indexOf('{');
+        if (firstBrace !== -1) {
+            responseText = responseText.substring(firstBrace);
+        }
+        
+        // Remove any text after the last }
+        const lastBrace = responseText.lastIndexOf('}');
+        if (lastBrace !== -1) {
+            responseText = responseText.substring(0, lastBrace + 1);
         }
 
         let aiResponse;
