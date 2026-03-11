@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
     `;
 
         const response = await hf.chatCompletion({
-            model: "meta-llama/Llama-3.2-3B-Instruct",
+            model: "meta-llama/Meta-Llama-3.1-8B-Instruct",
             messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: `User Query: ${query}` }
