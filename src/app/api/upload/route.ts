@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
         if (!tableName) tableName = 'dataset_' + Date.now();
 
         // Connect to SQLite
+        console.log('Connecting to DB at:', DB_PATH);
         const db = new Database(DB_PATH);
 
         // Dynamic Drop & Create Table
@@ -84,7 +85,11 @@ export async function POST(request: NextRequest) {
         });
 
     } catch (error: any) {
-        console.error('File processing error:', error);
-        return NextResponse.json({ error: error.message || 'Failed to process file' }, { status: 500 });
+        console.error('SERVER SIDE UPLOAD ERROR:', error);
+        return NextResponse.json({ 
+            error: error.message || 'Failed to process file',
+            details: error.stack,
+            path: DB_PATH
+        }, { status: 500 });
     }
 }
