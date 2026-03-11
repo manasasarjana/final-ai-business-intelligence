@@ -9,6 +9,7 @@ import DashboardGrid, { PinnedItem } from '@/components/DashboardGrid';
 export default function Home() {
   const [isDataReady, setIsDataReady] = useState(false);
   const [dataSummary, setDataSummary] = useState<{ rowCount: number, columns: string[] } | null>(null);
+  const [csvContent, setCsvContent] = useState<string>(''); // For stateless serverless support
 
   const [activeTab, setActiveTab] = useState<'chat' | 'dashboard'>('chat');
   const [pinnedItems, setPinnedItems] = useState<PinnedItem[]>([]);
@@ -30,6 +31,8 @@ export default function Home() {
     formData.append('file', file);
 
     try {
+      const text = await file.text();
+      setCsvContent(text);
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       if (res.ok) {
         const data = await res.json();
@@ -99,8 +102,9 @@ export default function Home() {
               Upload any CSV file. Ask natural language questions. Get fully interactive, presentation-ready dashboards in seconds.
             </p>
 
-            <FileUpload onUploadSuccess={(summary) => {
+            <FileUpload onUploadSuccess={(summary, content) => {
               setDataSummary(summary);
+              setCsvContent(content);
               setIsDataReady(true);
             }} />
           </div>
@@ -145,7 +149,7 @@ export default function Home() {
             </div>
 
             {activeTab === 'chat' ? (
-              <ChatInterface onPin={handlePin} pinnedIds={pinnedItems.map(p => p.id)} />
+              <ChatInterface onPin={handlePin} pinnedIds={pinnedItems.map(p => p.id)} csvContent={csvContent} />
             ) : (
               <DashboardGrid items={pinnedItems} />
             )}

@@ -19,9 +19,10 @@ interface Message {
 interface ChatInterfaceProps {
     onPin?: (item: PinnedItem) => void;
     pinnedIds?: string[];
+    csvContent?: string;
 }
 
-export default function ChatInterface({ onPin, pinnedIds = [] }: ChatInterfaceProps) {
+export default function ChatInterface({ onPin, pinnedIds = [], csvContent = '' }: ChatInterfaceProps) {
     const [messages, setMessages] = useState<Message[]>([
         {
             id: 'welcome',
@@ -128,7 +129,11 @@ export default function ChatInterface({ onPin, pinnedIds = [] }: ChatInterfacePr
         const fetchInsights = async () => {
             setIsLoading(true);
             try {
-                const response = await fetch('/api/auto-insights', { method: 'POST' });
+                const response = await fetch('/api/auto-insights', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ csvContent })
+                });
                 const data = await response.json();
 
                 if (response.ok && data.insights && data.insights.length > 0) {
@@ -169,7 +174,7 @@ export default function ChatInterface({ onPin, pinnedIds = [] }: ChatInterfacePr
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: userQuery, forecast: isForecasting })
+                body: JSON.stringify({ query: userQuery, forecast: isForecasting, csvContent })
             });
 
             const data = await response.json();

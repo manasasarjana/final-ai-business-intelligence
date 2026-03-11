@@ -4,7 +4,7 @@ import React, { useState, useRef } from 'react';
 import { UploadCloud, FileType, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 
 interface FileUploadProps {
-    onUploadSuccess: (summary: { rowCount: number, columns: string[] }) => void;
+    onUploadSuccess: (summary: { rowCount: number, columns: string[] }, content: string) => void;
 }
 
 export default function FileUpload({ onUploadSuccess }: FileUploadProps) {
@@ -65,11 +65,12 @@ export default function FileUpload({ onUploadSuccess }: FileUploadProps) {
                 throw new Error(result.error || 'Failed to upload file');
             }
 
+            const text = await file.text();
             setUploadStatus('success');
             onUploadSuccess({
                 rowCount: result.rowCount,
                 columns: result.columns
-            });
+            }, text);
 
             // Reset after 3 seconds
             setTimeout(() => setUploadStatus('idle'), 3000);

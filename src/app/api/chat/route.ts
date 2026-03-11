@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { HfInference } from '@huggingface/inference';
 import Database from 'better-sqlite3';
 import path from 'path';
+import { parse } from 'csv-parse/sync';
 
 export const runtime = 'nodejs';
 
@@ -10,7 +11,7 @@ const DB_PATH = process.env.VERCEL ? '/tmp/data.db' : path.join(process.cwd(), '
 
 export async function POST(req: NextRequest) {
     try {
-        const { query, forecast } = await req.json();
+        const { query, forecast, csvContent } = await req.json();
 
         if (!query) {
             return NextResponse.json({ error: 'Query is required' }, { status: 400 });
@@ -20,8 +21,25 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Hugging Face API key is not configured' }, { status: 500 });
         }
 
-        // Connect to SQLite to get the schema
-        const db = new Database(DB_PATH);
+        let db;
+        if (csvContent) {
+            // Stateless: Initialize in-memory DB from CSV content
+            db = new Database(':memory:');
+            const records = parse(csvContent, { columns: true, skip_empty_lines: true });
+            if (records.length > 0) {
+                const columns = Object.keys(records[0]);
+                const cleanColumns = columns.map(col => col.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase());
+                db.exec(`CREATE TABLE data (${cleanColumns.map(col => `"${col}" TEXT`).join(', ')});`);
+                const insertStmt = db.prepare(`INSERT INTO data (${cleanColumns.map(col => `"${col}"`).join(', ')}) VALUES (${cleanColumns.map(() => '?').join(', ')});`);
+                const insertMany = db.transaction((rows) => {
+                    for (const row of rows) insertStmt.run(columns.map(col => row[col]));
+                });
+                insertMany(records);
+            }
+        } else {
+            // Stateful: Use local file
+            db = new Database(DB_PATH);
+        }
 
         // Check if any tables exist
         const tables: any[] = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all();
